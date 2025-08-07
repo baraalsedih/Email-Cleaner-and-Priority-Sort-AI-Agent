@@ -1,0 +1,375 @@
+{
+  "name": "Email Cleaner & Priority Sort AI Agent copy",
+  "nodes": [
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are an intelligent assistant that helps organize incoming emails by classifying them and extracting useful metadata.\n\nYour task is to:\n1. Classify the email into one of the following categories:\n   - Important: Actionable or high-priority (e.g., work, clients, deadlines, bills).\n   - Can Wait: Low-priority (e.g., newsletters, notifications, social).\n   - Spam: Unwanted, promotional, or clearly irrelevant.\n\n2. Extract the following information:\n   - Subject\n   - Sender\n   - Summary: A short summary (1–2 lines) of the email content.\n   - Priority: One of [Important, Can Wait, Spam]\n\n---\n\nEmail Details:\nSubject: {{ $json[\"Subject\"] }}\n\nFrom: {{$json[\"From\"]}}\n\nID: {{ $json[\"id\"] }}\n\nBody:\n\"\"\"\n{{ $json.snippet }}\n\"\"\"\n\n---\n\nRespond in the following JSON format:\n{\n  \"subject\": \"...\",\n  \"sender\": \"...\",\n  \"id\": \"...\",\n  \"summary\": \"...\",\n  \"priority\": \"Important\" // or \"Can Wait\", \"Spam\"\n}\n",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        256,
+        0
+      ],
+      "id": "ec60fcd0-d58b-4551-92de-05ef65973456",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        192,
+        208
+      ],
+      "id": "5f1c05d2-f128-48f4-8395-7c3a5e83d74a",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "UtFYrmCRSqDEmR5l",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nconst updatedItems = items.map((item) => {\n  let rawText = item.json[\"text\"] || item.json[\"response\"];\n\n  // Clean triple backticks and optional \"json\" tag\n  rawText = rawText.trim()\n    .replace(/^```json/i, '')  // remove ```json\n    .replace(/^```/, '')       // remove ```\n    .replace(/```$/, '')       // remove trailing ```\n    .trim();\n\n  try {\n    const parsed = JSON.parse(rawText);\n    return { json: parsed };\n  } catch (error) {\n    return {\n      json: { error: \"Failed to parse cleaned Gemini response\", details: rawText },\n    };\n  }\n});\n\nreturn updatedItems;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        608,
+        0
+      ],
+      "id": "6e8337fe-2007-4477-a5c4-233a58e608e8",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.priority }}",
+                    "rightValue": "Important",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "67a79519-2e4a-4cc6-af56-36924c47d446"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "9f51c0e1-705c-4333-9eae-3742239b6409",
+                    "leftValue": "={{ $json.priority }}",
+                    "rightValue": "Can Wait",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "76e444bb-d651-480b-8e4c-212e4e277bed",
+                    "leftValue": "={{ $json.priority }}",
+                    "rightValue": "Spam",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        832,
+        -16
+      ],
+      "id": "f177d0d0-91e8-4e97-877e-8f2bcc62efc8",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "operation": "addLabels",
+        "messageId": "={{ $json.id }}",
+        "labelIds": [
+          "Label_1868987385780848637"
+        ]
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1040,
+        -176
+      ],
+      "id": "04ba0cae-eeda-491b-87ec-1371b44a06a5",
+      "name": "Important",
+      "webhookId": "19768464-82ba-44f1-a154-0ddff80bdaa0",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "kigvj1vw3c8vlmsp",
+          "name": "Gmail account 9"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "filters": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        16,
+        0
+      ],
+      "id": "9a067127-ddfa-4743-a4d6-6675c699a576",
+      "name": "Get many messages",
+      "webhookId": "988f8cc5-7a6f-4090-a610-0be38935ec0a",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "kigvj1vw3c8vlmsp",
+          "name": "Gmail account 9"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "addLabels",
+        "messageId": "={{ $json.id }}",
+        "labelIds": [
+          "SPAM"
+        ]
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1088,
+        208
+      ],
+      "id": "57ca5484-fe3a-4356-8075-0f698378f4a0",
+      "name": "Spam",
+      "webhookId": "ee3dacec-c175-4e3a-82ec-71b34de66377",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "kigvj1vw3c8vlmsp",
+          "name": "Gmail account 9"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "addLabels",
+        "messageId": "={{ $json.id }}",
+        "labelIds": [
+          "Label_4276975434302955990"
+        ]
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1216,
+        16
+      ],
+      "id": "62b4eadc-b495-4b2c-b981-b5065f94aa1e",
+      "name": "Can Wait",
+      "webhookId": "e01fcc0f-9a90-481a-b702-4cbc5dc98850",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "kigvj1vw3c8vlmsp",
+          "name": "Gmail account 9"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "webhook",
+        "content": "=Subject: {{ $json.subject }}\nSender: {{ $json.sender }}\nPriority: {{ $json.priority }}\nSummary: {{ $json.summary }}\n\n------------------------------------\n\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        1024,
+        -336
+      ],
+      "id": "e98dfb7d-50c7-4272-9d79-a0515d584bde",
+      "name": "Notify",
+      "webhookId": "ab716469-33e5-4171-bd40-5fe2f0c4e86e",
+      "credentials": {
+        "discordWebhookApi": {
+          "id": "ARECaTtrN0FM2Oyj",
+          "name": "Discord Webhook account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -192,
+        0
+      ],
+      "id": "aee3ad99-bbef-431d-b224-bb3499faaba8",
+      "name": "Schedule Trigger"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Important",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Notify",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Can Wait",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Spam",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get many messages": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Important": {
+      "main": [
+        []
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get many messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "9a400490-f3b1-4c5c-b809-22ecba9a7cfb",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "983dbc656662178050a7d757d5b21bc8ba81beeebb383539ad0077aee82e97d7"
+  },
+  "id": "h638XWRRgzrZoqRb",
+  "tags": []
+}
